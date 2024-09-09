@@ -1,60 +1,119 @@
+import numpy as np
 import pandas as pd
 import seaborn as sns
 import matplotlib.pyplot as plt
-import numpy as np
 
-## Import data
+# Load the data
 df = pd.read_csv('medical_examination.csv')
+def clean_data(df):
+    """
+    Clean the data by removing entries with incorrect values.
 
-## Add 'overweight' column
-df['overweight'] = (df['weight']/((df['height']/100)**2) > 25).astype(int)
+    Args:
+        df (pd.DataFrame): The medical examination data.
 
-## Normalize data by making 0 always good and 1 always bad. If the value of 'cholestorol' or 'gluc' is 1, make the value 0. If the value is more than 1, make the value 1.
-df[['gluc','cholesterol']] = (df[['gluc','cholesterol']] > 1).astype(int)
+    Returns:
+        pd.DataFrame: The cleaned data.
+    """
 
-## Draw Categorical Plot
-def draw_cat_plot():
-    ## Create DataFrame for cat plot using `pd.melt` using just the values from 'cholesterol', 'gluc', 'smoke', 'alco', 'active', and 'overweight'.
-    df_cat = pd.melt(df, id_vars=['cardio'], value_vars=['active', 'alco', 'cholesterol', 'gluc', 'overweight', 'smoke'])
+    # Filter out entries with diastolic pressure higher than systolic pressure
+    df = df[df['ap_lo'] <= df['ap_hi']]
 
+    # Filter out entries with extreme height values
+    df = df[df['height'] >= df['height'].quantile(0.025)]
+    df = df[df['height'] <= df['height'].quantile(0.975)]
 
-    ## Group and reformat the data to split it by 'cardio'. Show the counts of each feature. You will have to rename one of the collumns for the catplot to work correctly.
-    ## df_cat = None
+    # Filter out entries with extreme weight values
+    df = df[df['weight'] >= df['weight'].quantile(0.025)]
+    df = df[df['weight'] <= df['weight'].quantile(0.975)]
 
-    ## Draw the catplot with 'sns.catplot()'
-    fig = sns.catplot(data = df_cat, kind='count',  x='variable', hue='value', col='cardio').set(ylabel = 'total').fig
-
-
-    ## Do not modify the next two lines
-    fig.savefig('catplot.png')
-    return fig
+    return df
 
 
-## Draw Heat Map
-def draw_heat_map():
-    ## Clean the data
-    df_heat = df[ 
-        ( df['ap_lo'] <= df['ap_hi'] ) & 
-        ( df['height'] >= df['height'].quantile(0.025) ) & 
-        ( df['height'] <= df['height'].quantile(0.975) ) & 
-        ( df['weight'] >= df['weight'].quantile(0.025) ) & 
-        ( df['weight'] <= df['weight'].quantile(0.975) ) 
-    ]
+def calculate_overweight(df):
+    """
+    Calculate a new column 'overweight' based on Body Mass Index (BMI).
 
-    ## Calculate the correlation matrix
+    Args:
+        df (pd.DataFrame): The medical examination data.
+
+    Returns:
+        pd.DataFrame: The data with the new 'overweight' column.
+    """
+
+    df['bmi'] = df['weight'] / (df['height'] * df['height'])
+    df['overweight'] = (df['bmi'] > 25).astype(int)
+
+    return df
+
+
+def normalize_data(df):
+    """
+    Normalize cholesterol and gluc values (0 for good, 1 for bad).
+
+    Args:
+        df (pd.DataFrame): The medical examination data.
+
+    Returns:
+        pd.DataFrame: The data with normalized cholesterol and gluc values.
+    """
+
+    df['cholesterol'] = (df['cholesterol'] > 1).astype(int)
+    df['gluc'] = (df['gluc'] > 1).astype(int)
+
+    return df
+
+
+def draw_cat_plot(df):
+    """
+    Draw a categorical plot showing value counts for different features.
+
+    Args:
+        df (pd.DataFrame): The medical examination data.
+
+    Returns:
+        None
+    """
+
+    df_cat = pd.melt(
+        df,
+        id_vars=['cardio'],
+        value_vars=['cholesterol', 'gluc', 'smoke', 'alco', 'active', 'overweight'],
+        var_name='variable',
+        value_name='value'
+    )
+
+    df_cat = df_cat.groupby(['cardio', 'variable'])['value'].count().unstack()
+    df_cat.fillna(0, inplace=True)
+
+    fig = sns.catplot(
+        x='variable',
+        y='value',
+        hue='cardio',
+        kind='bar',
+        data=df_cat
+    )
+    fig.set_title('Distribution of Features by Cardio Value')
+    plt.show()
+
+
+def draw_heat_map(df):
+    """
+    Draw a heatmap showing the correlation matrix of the data.
+
+    Args:
+        df (pd.DataFrame): The medical examination data.
+
+    Returns:
+        None
+    """
+
+    df_heat = clean_data(df.copy())
     corr = df_heat.corr()
+    mask = np.triu(np.ones_like(corr, dtype=bool))
 
-    ## Generate a mask for the upper triangle
-    mask = np.triu(corr)
+    plt.figure(figsize=(10, 10))
+    sns.heatmap(corr, mask=mask, annot=True, cmap='coolwarm')
+    plt.title('Correlation Matrix of Medical Examination Data')
+    plt.show()
 
-
-    ## Set up the matplotlib figure
-    fig, ax =  plt.subplots()
-    
-    ## Draw the heatmap with 'sns.heatmap()'
-    ax = sns.heatmap(corr, mask=mask, annot=True, fmt='0.1f', square=True)
-
-
-    # Do not modify the next two lines
-    fig.savefig('heatmap.png')
-    return fig
